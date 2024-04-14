@@ -46,14 +46,10 @@ class SimpleDrivingEnv(gym.Env):
         self.reset()
         self._envStepCounter = 0
 
-        # Q-learning parameters
-        self.Q = np.zeros((self.observation_space.shape[0], self.action_space.n))
-        self.alpha = 0.1  # learning rate
-        self.gamma = 0.99  # discount factor
-        self.epsilon = 1.0  # exploration rate
-        self.epsilon_decay = 0.99  # decay rate for epsilon
+    def step(self, action, agent=None):
+        if agent is None:
+            raise ValueError("Agent cannot be None.")
 
-    def step(self, action):
         # Feed action to the car and get observation of car's state
         if (self._isDiscrete):
             fwd = [-1, -1, -1, 0, 0, 0, 1, 1, 1]
@@ -81,21 +77,15 @@ class SimpleDrivingEnv(gym.Env):
         reward = -dist_to_goal
         self.prev_dist_to_goal = dist_to_goal
 
-        # Update Q-value for previous state and action
-        self.Q[self.prev_state, self.prev_action] += self.alpha * (
-                    reward + self.gamma * np.max(self.Q[car_ob]) - self.Q[self.prev_state, self.prev_action])
+        # Update Q-value for previous state and action using agent
+        agent.update_q_values(self.prev_state, action, reward, car_ob)
 
-        # Choose next action using epsilon-greedy policy
-        if np.random.rand() < self.epsilon:
-            action = self.action_space.sample()
-        else:
-            action = np.argmax(self.Q[car_ob])
-
+        # Choose next action using epsilon-greedy policy from the agent
+        next_action = agent.choose_action(car_ob)
+        
         self.prev_state = car_ob
-        self.prev_action = action
-
         ob = car_ob
-        return ob, reward, self.done, {}
+        return ob, reward, self.done, {}, next_action
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
@@ -125,11 +115,7 @@ class SimpleDrivingEnv(gym.Env):
         # Get observation to return
         carpos, _ = self._p.getBasePositionAndOrientation(self.car.car)
         self.prev_state = self.getExtendedObservation()
-        self.prev_action = self.action_space.sample()
-
-        self.prev_dist_to_goal = np.linalg.norm(carpos - self.goal)
-        car_ob = self.prev_state
-        return np.array(car_ob, dtype=np.float32)
+        return np.array(self.prev_state, dtype=np.float32)
 
     def render(self, mode='human'):
         # Rendering code
